@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ThreatScan AI — Email Threat Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+  <!-- Animated background -->
+  <div class="bg-canvas">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <!-- ===== NAVBAR ===== -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="brand-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </span>
+      <span class="brand-name">ThreatScan <span class="brand-ai">AI</span></span>
+    </div>
+  </nav>
+
+  <!-- ===== HERO ===== -->
+  <header class="hero">
+    <div class="hero-tag">Multi-Class AI Detection Framework</div>
+    <h1 class="hero-title">
+      Email <span class="gradient-text">Threat</span> Detection
+    </h1>
+    <p class="hero-subtitle">
+      Analyse any email in real-time across four threat classes — Safe, Spam, Phishing, and Malware.
+    </p>
+  </header>
+
+  <!-- ===== UPLOAD ZONE ===== -->
+  <div class="upload-zone-wrap">
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="email-file-input" accept=".eml,.pdf,.mhtml,.mht" hidden />
+      <div class="upload-idle" id="upload-idle">
+        <div class="upload-icon">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="upload-text">
+          <span class="upload-main">Drop your email file here or <button type="button" class="upload-browse" id="upload-browse">browse</button></span>
+          <span class="upload-sub">Supports <strong>.eml</strong> (Gmail download) and <strong>.pdf</strong> (print to PDF) · Auto-analysed instantly</span>
+        </div>
+      </div>
+      <div class="upload-loading hidden" id="upload-loading">
+        <span class="spinner"></span>
+        <span>Parsing and analysing file…</span>
+      </div>
+      <div class="upload-success hidden" id="upload-success">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span id="upload-filename"></span>
+        <button type="button" class="upload-clear" id="upload-clear">✕ Clear</button>
+      </div>
+    </div>
+    <div class="upload-hint">
+      <strong>How to download from Gmail:</strong>
+      Open email → Click ⋮ (More) → <em>Download message</em> → saves as <code>.eml</code> → upload here
+    </div>
+  </div>
+
+  <!-- ===== MAIN LAYOUT ===== -->
+  <main class="main-grid">
+
+    <!-- ---- LEFT: Input Form ---- -->
+    <section class="card glass form-card" id="form-section">
+      <div class="card-header">
+        <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <h2 class="card-title">Email Input</h2>
+      </div>
+      <div class="info-banner">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span>URLs are <strong>auto-detected</strong> from the body. Just fill in the <strong>Sender Domain</strong> and <strong>Attachment</strong> details for best accuracy.</span>
+      </div>
+
+      <form id="email-form" novalidate>
+
+        <div class="form-row two-col">
+          <div class="form-group">
+            <label for="sender_domain">Sender Domain</label>
+            <input id="sender_domain" name="sender_domain" type="text" placeholder="e.g. paypal-verify.net" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="subject">Email Subject</label>
+            <input id="subject" name="subject" type="text" placeholder="e.g. URGENT: Verify Account" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="body">Email Body</label>
+          <textarea id="body" name="body" rows="5" placeholder="Paste the email body text here…"></textarea>
+        </div>
+
+
+
+        <!-- Attachment Analysis -->
+        <div class="section-divider"><span>Attachment Analysis</span></div>
+        <div class="form-row three-col">
+          <div class="form-group">
+            <label>Has Attachment?</label>
+            <div class="toggle-group">
+              <button type="button" id="att-no" class="toggle-btn active" data-val="0">No</button>
+              <button type="button" id="att-yes" class="toggle-btn" data-val="1">Yes</button>
+            </div>
+          </div>
+          <div class="form-group" id="ext-group">
+            <label for="attachment_ext">File Extension</label>
+            <select id="attachment_ext" name="attachment_ext">
+              <option value="">-- None --</option>
+              <option value=".pdf">.pdf</option>
+              <option value=".docx">.docx</option>
+              <option value=".xlsx">.xlsx</option>
+              <option value=".jpg">.jpg</option>
+              <option value=".html">.html</option>
+              <option value=".zip">.zip</option>
+              <option value=".exe">.exe (risky)</option>
+              <option value=".vbs">.vbs (risky)</option>
+              <option value=".scr">.scr (risky)</option>
+              <option value=".js">.js (risky)</option>
+              <option value=".bat">.bat (risky)</option>
+            </select>
+          </div>
+          <div class="form-group" id="size-group">
+            <label for="attachment_size_kb">File Size (KB)</label>
+            <input id="attachment_size_kb" name="attachment_size_kb" type="number" min="0" value="0" placeholder="e.g. 512" />
+          </div>
+        </div>
+
+        <!-- Presets -->
+        <div class="section-divider"><span>Quick Test Presets</span></div>
+        <div class="preset-row">
+          <button type="button" class="preset-btn preset-safe"      data-preset="safe">Safe</button>
+          <button type="button" class="preset-btn preset-spam"      data-preset="spam">Spam</button>
+          <button type="button" class="preset-btn preset-phishing"  data-preset="phishing">Phishing</button>
+          <button type="button" class="preset-btn preset-malware"   data-preset="malware">Malware</button>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submit-btn">
+          <span class="btn-text">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Analyse Email Threat
+          </span>
+          <span class="btn-loading hidden">
+            <span class="spinner"></span> Scanning…
+          </span>
+        </button>
+
+      </form>
+    </section>
+
+    <!-- ---- RIGHT: Results Panel ---- -->
+    <section class="card glass result-card" id="result-section">
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <p class="empty-title">No Analysis Yet</p>
+        <p class="empty-sub">Fill in the email details on the left and click <strong>Analyse Email Threat</strong> to see real-time AI results.</p>
+      </div>
+
+      <!-- Results (hidden until scan) -->
+      <div id="results" class="hidden">
+        <div class="card-header">
+          <svg class="card-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <h2 class="card-title">Detection Results</h2>
+        </div>
+
+        <!-- Verdict banner -->
+        <div id="verdict-banner" class="verdict-banner">
+          <div class="verdict-icon-wrap" id="verdict-icon-wrap">
+            <div class="verdict-icon" id="verdict-icon"></div>
+          </div>
+          <div class="verdict-text">
+            <div class="verdict-label">Threat Classification</div>
+            <div class="verdict-level" id="verdict-level">—</div>
+            <div class="verdict-subject" id="verdict-subject"></div>
+          </div>
+          <div class="verdict-confidence" id="verdict-confidence"></div>
+        </div>
+
+        <!-- Confidence Bars -->
+        <div class="section-label">Confidence Scores</div>
+        <div class="confidence-bars" id="confidence-bars"></div>
+
+        <!-- Indicators -->
+        <div class="section-label">Key Indicators</div>
+        <div class="indicators-grid" id="indicators-grid"></div>
+
+        <!-- Recommendation -->
+        <div class="recommendation" id="recommendation"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <div class="footer-brand">ThreatScan AI</div>
+    <p>A Comprehensive AI-Based Framework for Multi-Class Email Threat Detection</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
