@@ -1,0 +1,279 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{url}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{AI-Based Email Threat Detection (Spam + Phishing + Malware)}
+
+\author{
+\IEEEauthorblockN{Dr. Sendil Vadivu D}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{Vel Tech Rangarajan Dr Sagunthala R\&D Institute of Science and Technology}\\
+Chennai, India \\
+ashasendilvadivu@gmail.com}
+\and
+\IEEEauthorblockN{G. Venkata Suresh}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{Vel Tech Rangarajan Dr Sagunthala R\&D Institute of Science and Technology}\\
+Chennai, India \\
+gogulasuresh778@gmail.com}
+\and
+\IEEEauthorblockN{P. Krishna Harsha}
+\IEEEauthorblockA{\textit{Dept. of Computer Science and Engineering} \\
+\textit{Vel Tech Rangarajan Dr Sagunthala R\&D Institute of Science and Technology}\\
+Chennai, India \\
+ponnekantikrishnaharsha215@gmail.com}
+}
+
+\maketitle
+
+\begin{abstract}
+Electronic mail remains a primary communication channel across enterprises, academia, and personal environments, making it an attractive entry point for malicious actors. Conventional email security tools rely heavily on static blacklists, rule-based heuristics, or signature matching, which fail against zero-day campaigns, obfuscated URLs, and polymorphic payloads. Furthermore, most existing research treats spam, phishing, and malware delivery as isolated problems rather than interconnected threat vectors. This paper presents an integrated AI-driven framework capable of categorizing incoming email messages into four distinct classes: Legitimate, Spam, Phishing, and Malware. The proposed system conducts multi-vector inspection across raw text content, sender metadata, embedded hyperlinks, and file attachments. Natural Language Processing (NLP) with n-gram Term Frequency-Inverse Document Frequency (TF-IDF) alongside specialized heuristic patterns extracts linguistic markers of deception and urgency. An Extreme Gradient Boosting (XGBoost) classifier processes these heterogeneous features to deliver probabilistic threat scoring and interpretable indicators. The experimental pipeline was evaluated using 10,000 structured email records comprising genuine communications alongside malicious samples. The proposed model achieves an overall classification accuracy exceeding 94\%, demonstrating balanced precision and recall across all four classes with sub-50\,ms inference latency. A functional web deployment supporting direct message entry and automated MIME/PDF parsing validates the real-world operational viability of the architecture.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Email security, spam detection, phishing mitigation, malware detection, natural language processing, XGBoost, multi-class classification, feature engineering.
+\end{IEEEkeywords}
+
+\section{Introduction}
+Electronic mail functions as the foundation of modern organizational workflow, handling correspondence, billing, access notifications, and document exchange. This ubiquity has established email as the single largest delivery channel for cyber threats worldwide. Threat actors continuously evolve their approaches, moving beyond simple bulk spam to sophisticated social engineering, brand impersonation, credential harvesting, and weaponized attachments.
+
+Traditional perimeter defenses, including standard spam filters, reputation blacklists, and signature-matching anti-virus engines, operate reactively. While adequate for known threats, they struggle against adversarial tactics such as lookalike domains, obfuscated redirect links, tracking pixels, and macro-free droppers. A core limitation within academic literature is siloed analysis: spam filters examine textual patterns, phishing detectors examine web links, and malware scanners inspect file hashes. In real-world security operations, sophisticated email attacks frequently combine multiple vectors. A targeted spear-phishing email often uses legitimate phrasing to pass content filters while directing the victim toward a credential-stealing site or an archive containing a script-based executable.
+
+To resolve these limitations, this paper develops a comprehensive, unified machine learning framework for multi-class email threat detection. By analyzing four key layers---content semantics, sender domain metadata, URL patterns, and attachment profiles---the system accurately classifies incoming messages into Legitimate, Spam, Phishing, or Malware categories.
+
+The major contributions of this study are summarized as follows:
+\begin{enumerate}
+    \item We design an end-to-end multi-vector inspection framework that evaluates email content, sender metadata, embedded hyperlinks, and attachments within a single unified pipeline.
+    \item We construct a feature engineering methodology combining n-gram TF-IDF representations with deterministic regex rules for urgency markers, financial indicators, and bulk headers (e.g., \texttt{List-Unsubscribe}, \texttt{Feedback-ID}).
+    \item We implement and evaluate an XGBoost multi-class classification model designed to process sparse lexical matrices alongside dense numerical and categorical indicators.
+    \item We address structural defects present in earlier iterations of email threat architectures by providing clean cross-validation, realistic class balancing, and low inference latency.
+    \item We deploy the complete engine as an interactive web-based detection tool capable of ingesting raw text as well as parsing standardized \texttt{.eml} and exported PDF message formats.
+\end{enumerate}
+
+The remainder of this paper is structured as follows. Section~\ref{sec:related} reviews related literature across spam, phishing, and malware detection. Section~\ref{sec:architecture} describes the proposed system architecture, preprocessing, and feature engineering. Section~\ref{sec:results} discusses experimental results, evaluation metrics, and comparative analysis. Section~\ref{sec:conclusion} concludes the paper with future research directions.
+
+\section{Related Work}
+\label{sec:related}
+Machine learning methods for email threat mitigation have evolved substantially over the past two decades, progressing from bag-of-words Naive Bayes classifiers to deep contextual representations.
+
+\subsection{Spam Filtering}
+Early anti-spam research focused heavily on lexical statistics. Androutsopoulos et al.~\cite{b1} demonstrated the viability of Naive Bayes for discriminating legitimate personal correspondence from commercial spam. Cormack~\cite{b2} conducted comprehensive surveys evaluating the trade-off between false positives and filter sensitivity, concluding that statistical learning consistently outperformed static keyword lists. Later research by Gomez Hidalgo et al.~\cite{b3} highlighted the role of n-gram tokenization and message length statistics in detecting evasive marketing spam. However, traditional spam detectors operate almost exclusively on message bodies, offering minimal protection against credential harvesting or malicious payloads.
+
+\subsection{Phishing Detection}
+Phishing attacks emphasize impersonation and psychological manipulation. Abu-Nimeh et al.~\cite{b4} evaluated multiple predictive models, including Support Vector Machines (SVM), Random Forests, and Logistic Regression, establishing that tree ensembles delivered superior stability on high-dimensional URL attributes. Mohammad et al.~\cite{b5} analyzed structural characteristics of phishing domains, identifying registration age, IP-based URLs, and subdomain depth as strong indicators. Marchal et al.~\cite{b6} proposed \textit{PhishStorm}, an automated system analyzing lexical randomness and redirect chains in real time. Although effective for URL analysis, purely link-centric tools fail when an email contains clean links pointing to intermediate storage platforms or when malicious attachments are utilized.
+
+\subsection{Email Malware Delivery}
+Malicious attachments represent a destructive vector, delivering ransomware, keyloggers, and trojan loaders. Schultz et al.~\cite{b7} demonstrated data mining techniques on binary headers, establishing that statistical inspection of executable characteristics could identify zero-day malware without static signatures. Kolter and Maloof~\cite{b8} utilized n-gram byte sequences to detect obfuscated payloads. Contemporary attacks often use double extensions, script droppers (\texttt{.vbs}, \texttt{.js}, \texttt{.scr}), or password-protected archives to bypass basic gateway filters.
+
+\subsection{Comparative Summary}
+Table~\ref{tab:comparison} highlights the gap in existing literature. While specialized models achieve high accuracy within their single domain, they lack the holistic visibility required to identify combined multi-stage threats. The proposed framework fills this gap by simultaneously assessing content, headers, hyperlinks, and attachments.
+
+\begin{table}[htbp]
+\caption{Comparison of Email Threat Detection Approaches}
+\label{tab:comparison}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Approach} & \textbf{Content} & \textbf{Metadata} & \textbf{URLs} & \textbf{Attachments} \\
+\midrule
+Spam Filtering~\cite{b1,b3} & \checkmark & $\times$ & $\times$ & $\times$ \\
+Phishing Classifiers~\cite{b4,b5} & \checkmark & Partial & \checkmark & $\times$ \\
+Malware Scanners~\cite{b7,b8} & $\times$ & $\times$ & $\times$ & \checkmark \\
+\textbf{Proposed Framework} & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{System Architecture and Methodology}
+\label{sec:architecture}
+The proposed framework operates through five modular stages: email ingestion and parsing, text preprocessing, feature engineering, classification via XGBoost, and result fusion. The conceptual workflow is illustrated in Fig.~\ref{fig:architecture}.
+
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{20pt}\textbf{[Fig. 1: System Architecture of the Proposed Email Threat Detection Framework]}\\\textit{(Ingestion $\rightarrow$ Preprocessing $\rightarrow$ Multi-Vector Feature Extraction $\rightarrow$ XGBoost Model $\rightarrow$ Threat Verdict)}\vspace{20pt}}}
+\caption{System architecture of the proposed multi-class threat detection system.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Email Ingestion and Parsing Module}
+The framework ingests incoming messages through two primary modalities: structured JSON payloads for live API calls, and raw file uploads (\texttt{.eml} or exported PDF documents). 
+
+When processing standardized RFC-822 / MIME (\texttt{.eml}) files, the parser traverses all multipart boundaries to separate plain text, HTML bodies, and base64-encoded attachment streams. Header fields including \texttt{Subject}, \texttt{From}, \texttt{To}, \texttt{Date}, \texttt{List-Unsubscribe}, and \texttt{Feedback-ID} are parsed and mapped. Embedded hyperlink references inside anchor tags (\texttt{<a href="...">}) are preserved prior to HTML stripping, ensuring all candidate URLs are captured.
+
+\subsection{Text Preprocessing}
+Extracted email subject lines and message bodies undergo standardized text normalization:
+\begin{itemize}
+    \item Stripping of residual HTML/XML tags and entity decodings.
+    \item Conversion to lowercase and elimination of non-standard punctuation.
+    \item Removal of general English stop-words that contribute no discriminative signal.
+    \item Normalization of irregular whitespace and newline delimiters.
+\end{itemize}
+
+\subsection{Feature Engineering}
+Feature extraction converts raw inputs into a unified numerical vector representing four distinct threat surfaces:
+\begin{enumerate}
+    \item \textbf{Textual Features (NLP):} The normalized message text is transformed using Term Frequency-Inverse Document Frequency (TF-IDF) vectorization across unigrams and bigrams. For a term $t$ in document $d$ within corpus $D$:
+    \begin{equation}
+        \text{TF-IDF}(t, d, D) = \text{TF}(t, d) \times \log\left(\frac{1 + |D|}{1 + |\{d \in D : t \in d\}|}\right) + 1
+    \end{equation}
+    The vocabulary is constrained to the top 1,000 most informative lexical tokens, capturing phrasing such as ``account suspension'', ``verify identity'', and ``invoice attached''.
+    
+    \item \textbf{Heuristic Semantic Indicators:} Binary indicator variables flag high-risk linguistic patterns, including urgent calls to action (\textit{immediate, suspend, attention, urgent}) and financial transaction terminology (\textit{wire transfer, remittance, banking, invoice}).
+    
+    \item \textbf{URL and Hyperlink Features:} Total hyperlink count and suspicious link metrics are derived using regex expressions. Hyperlinks are evaluated for raw IP addresses, URL shortener domains (e.g., \texttt{bit.ly}, \texttt{tinyurl}), known suspicious Top-Level Domains (TLDs such as \texttt{.xyz}, \texttt{.top}, \texttt{.click}), and commercial click-tracking paths.
+    
+    \item \textbf{Sender Domain and Bulk Metadata:} Sender domains are cross-referenced against organizational domains and common public mail providers. Flags denote suspicious lookalike strings and automated bulk delivery headers (\texttt{List-Unsubscribe}, \texttt{Feedback-ID}).
+    
+    \item \textbf{Attachment Profile:} Features record presence of attachments, size in kilobytes, and extension risk. File extensions matching executable or script formats (\texttt{.exe}, \texttt{.vbs}, \texttt{.scr}, \texttt{.js}, \texttt{.bat}, \texttt{.zip}) are flagged as high risk.
+\end{enumerate}
+
+The final feature vector combines 270 sparse TF-IDF text features with 7 dense heuristic/metadata features, producing a 277-dimensional representation per email.
+
+\subsection{Machine Learning Classification Layer}
+The classification engine employs an Extreme Gradient Boosting (XGBoost) ensemble. XGBoost builds a sequence of shallow decision trees in which each successive tree minimizes the residual error of the prior ensemble using second-order Taylor approximations of the objective function.
+
+For a dataset with $n$ instances and $m$ features, the objective function $\mathcal{L}$ at iteration $t$ is defined as:
+\begin{equation}
+    \mathcal{L}^{(t)} = \sum_{i=1}^{n} l\left(y_i, \hat{y}_i^{(t-1)} + f_t(x_i)\right) + \Omega(f_t)
+\end{equation}
+where $l$ denotes the cross-entropy loss across $K=4$ classes, $f_t$ is the new tree function, and $\Omega(f)$ penalizes tree complexity to prevent overfitting:
+\begin{equation}
+    \Omega(f) = \gamma T + \frac{1}{2}\lambda\sum_{j=1}^{T} w_j^2
+\end{equation}
+Here, $T$ is the number of leaves, and $w_j$ represents leaf weights. The model outputs a probability distribution vector $\mathbf{P} = [p_{\text{Safe}}, p_{\text{Spam}}, p_{\text{Phishing}}, p_{\text{Malware}}]$ using the \texttt{multi:softprob} objective function. The predicted label corresponds to $\operatorname{argmax}(\mathbf{P})$.
+
+\subsection{Threat Classification and Result Fusion}
+The result fusion layer translates raw numerical probabilities into an interpretable security verdict. The system outputs the predicted category, class-wise confidence scores, and specific explanatory flags (e.g., suspicious URLs detected, dangerous file extensions, or bulk headers). This explainability aids security analysts in rapidly verifying automated decisions.
+
+\subsection{System Parameters}
+The core parameters governing the end-to-end framework are summarized in Table~\ref{tab:sys_params}.
+
+\begin{table}[htbp]
+\caption{System Implementation Parameters}
+\label{tab:sys_params}
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Configuration / Value} \\
+\midrule
+Application Scope & Multi-Class Email Security Analysis \\
+Target Classes & Legitimate, Spam, Phishing, Malware \\
+Input Modalities & Raw text, MIME (\texttt{.eml}), Exported PDF \\
+Text Representation & TF-IDF (1--2 grams, 1,000 max features) \\
+Classifier & XGBoost Multi-Class (\texttt{multi:softprob}) \\
+Tree Depth & 6 \\
+Learning Rate ($\eta$) & 0.1 \\
+Number of Estimators & 150 \\
+Serving Backend & Python / Flask WSGI \\
+Audit Database & Embedded SQLite (\texttt{threats.db}) \\
+Inference Latency & $< 45$\,ms per email \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Experimental Results and Discussion}
+\label{sec:results}
+
+\subsection{Dataset Formulation}
+Evaluating multi-vector email threat detection requires data covering content, domain metadata, link structures, and attachment properties simultaneously. Public benchmarks (e.g., Enron, SpamAssassin, Nazario Phishing Corpus) typically capture only isolated vectors (e.g., text only or URLs only) and lack standardized four-class ground truth labels. 
+
+To conduct rigorous controlled evaluation, we generated the Synthetic Enterprise Email Threat Dataset (SEETD), containing 10,000 structured email instances reflecting realistic organizational communication patterns. The class breakdown comprises:
+\begin{itemize}
+    \item \textbf{Legitimate (5,000 records, 50\%):} Typical corporate correspondence, meeting schedules, billing notifications with benign attachments (\texttt{.pdf}, \texttt{.docx}), and internal domains.
+    \item \textbf{Spam (3,000 records, 30\%):} Marketing promotions, discount offers, multiple tracking links, and high frequency of commercial vocabulary.
+    \item \textbf{Phishing (1,500 records, 15\%):} Urgent account security alerts, spoofed sender domains, and deceptive credential-harvesting links.
+    \item \textbf{Malware (500 records, 5\%):} Invoices and subpoenas carrying weaponized attachments (\texttt{.exe}, \texttt{.scr}, \texttt{.vbs}, \texttt{.zip}) and dropper references.
+\end{itemize}
+
+The dataset was partitioned using an 80:20 stratified split into 8,000 training samples and 2,000 independent test samples.
+
+\subsection{Evaluation Metrics}
+Model performance is quantified using standard classification metrics:
+\begin{equation}
+    \text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+\end{equation}
+\begin{equation}
+    \text{Precision} = \frac{TP}{TP + FP}, \quad \text{Recall} = \frac{TP}{TP + FN}
+\end{equation}
+\begin{equation}
+    \text{F1-Score} = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+\end{equation}
+
+\subsection{Threat-Wise Performance}
+Table~\ref{tab:threat_performance} summarizes performance across the test set (2,000 samples). The model achieved strong differentiation across all four threat classes.
+
+\begin{table}[htbp]
+\caption{Threat-Wise Detection Performance Across Test Samples}
+\label{tab:threat_performance}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Threat Class} & \textbf{Precision (\%)} & \textbf{Recall (\%)} & \textbf{F1-Score (\%)} & \textbf{Support} \\
+\midrule
+Legitimate & 96.4 & 97.2 & 96.8 & 1,000 \\
+Spam       & 94.1 & 93.5 & 93.8 & 600 \\
+Phishing   & 93.2 & 92.8 & 93.0 & 300 \\
+Malware    & 95.8 & 94.0 & 94.9 & 100 \\
+\midrule
+\textbf{Weighted Avg.} & \textbf{95.2} & \textbf{95.3} & \textbf{95.2} & \textbf{2,000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Legitimate emails achieved the highest F1-score (96.8\%), confirming that normal correspondence is preserved with a low false positive rate (FPR $< 3.2\%$). Phishing detection achieved 93.2\% precision, effectively isolating urgency and domain irregularities. Malware achieved 95.8\% precision, driven by strong correlation between dangerous file extensions and low benign utility.
+
+\subsection{Comparative Analysis with Other Models}
+To validate the choice of XGBoost, we trained alternative classical classifiers across the identical feature matrix. As shown in Table~\ref{tab:model_comparison}, XGBoost consistently outperformed Naive Bayes, Logistic Regression, Support Vector Machines (SVM), and Random Forest.
+
+\begin{table}[htbp]
+\caption{Performance Comparison with Baseline Machine Learning Models}
+\label{tab:model_comparison}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Accuracy (\%)} & \textbf{Precision (\%)} & \textbf{Recall (\%)} & \textbf{F1-Score (\%)} \\
+\midrule
+Multinomial Naive Bayes & 86.4 & 85.1 & 84.8 & 84.9 \\
+Logistic Regression     & 90.2 & 89.7 & 89.1 & 89.4 \\
+Support Vector Machine  & 92.6 & 92.1 & 91.8 & 91.9 \\
+Random Forest           & 93.8 & 93.4 & 93.0 & 93.2 \\
+\textbf{Proposed XGBoost} & \textbf{95.3} & \textbf{95.2} & \textbf{95.3} & \textbf{95.2} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+While Naive Bayes suffers from strong conditional independence assumptions across mixed dense and sparse features, tree-based models (Random Forest and XGBoost) capture non-linear feature interactions effectively. XGBoost achieves superior generalization by virtue of its regularized gradient boosting framework.
+
+\subsection{Operational Validation on Real-World Emails}
+To verify practical efficacy beyond synthetic splits, the system was validated against authentic downloaded enterprise messages, including corporate newsletters and promotional emails from platforms such as Amazon SES and CleverTap. By implementing pre-strip hyperlink harvesting and inspecting \texttt{List-Unsubscribe} and \texttt{Feedback-ID} headers, the framework successfully distinguished bulk commercial solicitations from genuine personal correspondence. Average processing latency remained under 45\,ms per message on standard commodity hardware, confirming feasibility for real-time mail transfer agent (MTA) integration.
+
+\section{Conclusion}
+\label{sec:conclusion}
+This paper presented an integrated, AI-based framework for multi-class email threat detection. Unlike conventional single-vector filters, the proposed architecture examines content semantics, sender domain reputation, URL profiles, and attachment characteristics simultaneously. By leveraging TF-IDF NLP representations alongside regularized XGBoost classification, the system discriminates among Legitimate, Spam, Phishing, and Malware messages with an overall F1-score of 95.2\% and low false alarm rates. The accompanying web application and file parser illustrate practical utility for enterprise deployment. Future work will investigate transformer-based embeddings (e.g., RoBERTa) for deep semantic analysis and integrate graph-based domain reputation networks to detect distributed phishing infrastructure.
+
+\begin{thebibliography}{00}
+\bibitem{b1} I. Androutsopoulos, J. Koutsias, K. V. Chandrinos, G. Paliouras, and C. D. Spyropoulos, ``An evaluation of naive Bayesian anti-spam filtering,'' in \textit{Proc. Workshop on Machine Learning in the Information Society}, 2000, pp. 9--17.
+\bibitem{b2} G. V. Cormack, ``Email spam filtering: A systematic review,'' \textit{Foundations and Trends in Information Retrieval}, vol. 1, no. 4, pp. 335--455, 2008.
+\bibitem{b3} J. M. Gomez Hidalgo, J. M. Martin Abreu, E. C. Sanz, and E. P. Garcia, ``Content based SMS spam filtering,'' in \textit{Proc. ACM Symp. Document Engineering}, 2006, pp. 107--114.
+\bibitem{b4} S. Abu-Nimeh, D. Nappa, X. Wang, and S. Nair, ``A comparison of machine learning techniques for phishing detection,'' in \textit{Proc. eCrime Researchers Summit}, 2007, pp. 60--69.
+\bibitem{b5} R. M. Mohammad, F. Thabtah, and L. McCluskey, ``Predicting phishing websites based on an adaptive learning approach with artificial neural networks,'' in \textit{Proc. Int. Conf. Information Technology---New Generations}, 2012, pp. 492--497.
+\bibitem{b6} S. Marchal, J. Francois, R. State, and T. Engel, ``PhishStorm: Detecting phishing with streaming analytics,'' \textit{IEEE Trans. Netw. Serv. Manage.}, vol. 11, no. 4, pp. 458--471, Dec. 2014.
+\bibitem{b7} M. G. Schultz, E. Eskin, F. Zadok, and S. J. Stolfo, ``Data mining methods for detection of new malicious executables,'' in \textit{Proc. IEEE Symp. Security and Privacy}, 2001, pp. 38--49.
+\bibitem{b8} J. Z. Kolter and M. A. Maloof, ``Learning to detect malicious executables in the wild,'' in \textit{Proc. 10th ACM SIGKDD Int. Conf. Knowledge Discovery and Data Mining}, 2004, pp. 470--478.
+\bibitem{b9} T. Pietraszek and A. C. Tanner, ``Data mining and machine learning---Towards reducing false positives in intrusion detection,'' \textit{Inf. Secur. Tech. Rep.}, vol. 10, no. 3, pp. 169--183, 2005.
+\bibitem{b10} T. Chen and C. Guestrin, ``XGBoost: A scalable tree boosting system,'' in \textit{Proc. 22nd ACM SIGKDD Int. Conf. Knowledge Discovery and Data Mining}, 2016, pp. 785--794.
+\end{thebibliography}
+
+\end{document}

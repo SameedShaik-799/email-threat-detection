@@ -7,3 +7,4 @@ venv/
 env/
 .system_generated/
 email_dataset.csv
+*.db

@@ -324,3 +324,86 @@ async function handleFileUpload(file) {
     uploadLoading.classList.add('hidden');
   }
 }
+
+// ===== DATABASE MODAL LOGIC =====
+const dbNavBtn      = document.getElementById('db-nav-btn');
+const dbModal       = document.getElementById('db-modal');
+const dbModalClose  = document.getElementById('db-modal-close');
+const dbOverlay     = document.getElementById('db-modal-overlay');
+const dbTableBody   = document.getElementById('db-table-body');
+
+const dbStatTotal   = document.getElementById('db-stat-total');
+const dbStatSafe    = document.getElementById('db-stat-safe');
+const dbStatSpam    = document.getElementById('db-stat-spam');
+const dbStatPhish   = document.getElementById('db-stat-phish');
+const dbStatMalware = document.getElementById('db-stat-malware');
+
+if (dbNavBtn) {
+  dbNavBtn.addEventListener('click', openDatabaseModal);
+}
+if (dbModalClose) {
+  dbModalClose.addEventListener('click', closeDatabaseModal);
+}
+if (dbOverlay) {
+  dbOverlay.addEventListener('click', closeDatabaseModal);
+}
+
+function openDatabaseModal() {
+  dbModal.classList.remove('hidden');
+  fetchDatabaseLogs();
+}
+
+function closeDatabaseModal() {
+  dbModal.classList.add('hidden');
+}
+
+async function fetchDatabaseLogs() {
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    
+    // Update stats counters
+    dbStatTotal.textContent = data.total_scanned || 0;
+    dbStatSafe.textContent = (data.class_breakdown && data.class_breakdown['Safe']) || 0;
+    dbStatSpam.textContent = (data.class_breakdown && data.class_breakdown['Spam']) || 0;
+    dbStatPhish.textContent = (data.class_breakdown && data.class_breakdown['Phishing']) || 0;
+    dbStatMalware.textContent = (data.class_breakdown && data.class_breakdown['Malware']) || 0;
+    
+    // Render table rows
+    if (!data.recent_scans || data.recent_scans.length === 0) {
+      dbTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-dim);">No emails logged yet in threats.db. Scan an email to view it here!</td></tr>';
+      return;
+    }
+    
+    let html = '';
+    data.recent_scans.forEach(row => {
+      const cls = (row.predicted_threat || 'safe').toLowerCase();
+      const badgeCls = `badge-${cls}`;
+      const shortSubj = (row.subject || '(no subject)').length > 35 ? (row.subject.substring(0, 32) + '...') : row.subject;
+      const cleanTime = (row.timestamp || '').replace('T', ' ').substring(0, 19);
+      
+      html += `
+        <tr>
+          <td>#${row.id}</td>
+          <td style="color:var(--text-dim);font-size:0.75rem;">${cleanTime}</td>
+          <td title="${row.subject || ''}"><strong>${escapeHtml(shortSubj)}</strong></td>
+          <td style="color:var(--text-muted);">${escapeHtml(row.sender_domain || '—')}</td>
+          <td><span class="badge-threat ${badgeCls}">${row.predicted_threat}</span></td>
+          <td style="font-weight:700;">${row.confidence}%</td>
+          <td>${row.url_count}</td>
+          <td style="color:var(--text-dim);font-size:0.75rem;">${escapeHtml(row.file_name || 'Manual')}</td>
+        </tr>
+      `;
+    });
+    dbTableBody.innerHTML = html;
+  } catch (err) {
+    dbTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--red);">Error reading from SQLite: ${err.message}</td></tr>`;
+  }
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text.replace(/[&<>"']/g, function(m) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+  });
+}

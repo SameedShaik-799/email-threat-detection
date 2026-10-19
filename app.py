@@ -7,14 +7,70 @@ import re
 import email as email_lib
 import email.policy
 import io
+import sqlite3
 
 app = Flask(__name__)
 
 MODEL_PATH     = 'xgboost_threat_model.pkl'
 EXTRACTOR_PATH = 'feature_extractor.pkl'
+DB_PATH        = 'threats.db'
 
 model     = None
 extractor = None
+
+def init_db():
+    """Initialize SQLite database for scan audit logging."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS scan_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            subject TEXT,
+            sender_domain TEXT,
+            predicted_threat TEXT,
+            confidence REAL,
+            url_count INTEGER,
+            suspicious_url_count INTEGER,
+            has_attachment INTEGER,
+            attachment_ext TEXT,
+            is_bulk INTEGER,
+            file_name TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+    print("[INFO] SQLite database initialized at threats.db")
+
+def log_scan_to_db(subject, sender_domain, predicted_threat, confidence,
+                    url_count, suspicious_url_count, has_attachment,
+                    attachment_ext, is_bulk, file_name=''):
+    """Record an email scan entry into SQLite."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO scan_logs 
+            (subject, sender_domain, predicted_threat, confidence, url_count, suspicious_url_count, has_attachment, attachment_ext, is_bulk, file_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(subject)[:255],
+            str(sender_domain)[:100],
+            str(predicted_threat),
+            float(confidence),
+            int(url_count),
+            int(suspicious_url_count),
+            int(has_attachment),
+            str(attachment_ext),
+            1 if is_bulk else 0,
+            str(file_name)[:255]
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[DB ERROR] Failed to log scan to SQLite: {e}")
+
+init_db()
 
 def load_artifacts():
     global model, extractor
@@ -59,7 +115,6 @@ def extract_urls(text):
     """Extract all URLs and detect suspicious/tracking patterns."""
     url_pattern = r'https?://[^\s<>"\'\\]+'
     urls = re.findall(url_pattern, str(text), re.IGNORECASE)
-    # Deduplicate while preserving order
     seen = set()
     unique_urls = []
     for u in urls:
@@ -123,7 +178,6 @@ def parse_eml(file_bytes):
     if match:
         sender_domain = match.group(1).lower()
 
-    # Collect raw text parts and attachments
     raw_content_parts = []
     has_attachment = 0
     attachment_ext = ''
@@ -157,11 +211,8 @@ def parse_eml(file_bytes):
             raw_content_parts.append(str(msg.get_payload() or ''))
 
     all_raw = ' '.join(raw_content_parts)
-    # Strip HTML tags for clean body text
     clean_body = re.sub(r'<[^>]+>', ' ', all_raw)
     clean_body = re.sub(r'\s+', ' ', clean_body).strip()
-
-    # Headers for bulk/marketing detection
     headers_str = '\n'.join(f'{k}: {v}' for k, v in msg.items())
 
     return {
@@ -208,7 +259,7 @@ def parse_pdf(file_bytes):
     except ImportError:
         return None
 
-def run_detection(subject, body, sender_domain, has_attachment, attachment_ext, attachment_size_kb, raw_text_for_urls=None, headers_str=''):
+def run_detection(subject, body, sender_domain, has_attachment, attachment_ext, attachment_size_kb, raw_text_for_urls=None, headers_str='', file_name=''):
     """Core detection logic shared by both the form and file upload."""
     text_to_scan = raw_text_for_urls if raw_text_for_urls else (subject + ' ' + body)
     url_count, suspicious_url_count = extract_urls(text_to_scan)
@@ -217,7 +268,6 @@ def run_detection(subject, body, sender_domain, has_attachment, attachment_ext, 
     if sender_is_suspicious:
         suspicious_url_count = max(suspicious_url_count, min(url_count, 3))
 
-    # Check bulk and spam keywords
     is_bulk, spam_score = check_spam_signals(subject, body, headers_str)
     if is_bulk or spam_score >= 2:
         if suspicious_url_count == 0 and url_count > 0:
@@ -243,7 +293,6 @@ def run_detection(subject, body, sender_domain, has_attachment, attachment_ext, 
     probs      = model.predict_proba(X)[0]
     pred_class = int(np.argmax(probs))
 
-    # If strongly flagged as bulk marketing spam and predicted as Safe, adjust to Spam
     if (is_bulk or spam_score >= 3) and pred_class == 0 and not sender_domain.endswith(('edu', 'ac.in', 'gov.in')):
         pred_class = 1
         probs = [0.15, 0.70, 0.10, 0.05]
@@ -252,10 +301,27 @@ def run_detection(subject, body, sender_domain, has_attachment, attachment_ext, 
     has_urgent        = bool(df['has_urgent_kw'].iloc[0])
     has_financial     = bool(df['has_financial_kw'].iloc[0])
 
+    predicted_label = CLASS_NAMES[pred_class]
+    confidence_val  = round(float(probs[pred_class]) * 100, 2)
+
+    # Log to SQLite Database
+    log_scan_to_db(
+        subject=subject,
+        sender_domain=sender_domain,
+        predicted_threat=predicted_label,
+        confidence=confidence_val,
+        url_count=url_count,
+        suspicious_url_count=suspicious_url_count,
+        has_attachment=has_attachment,
+        attachment_ext=attachment_ext,
+        is_bulk=is_bulk,
+        file_name=file_name
+    )
+
     return {
         'email_subject':          subject,
         'sender':                 sender_domain,
-        'predicted_threat_level': CLASS_NAMES[pred_class],
+        'predicted_threat_level': predicted_label,
         'threat_class':           pred_class,
         'threat_color':           CLASS_COLORS[pred_class],
         'confidence_scores': {
@@ -302,6 +368,7 @@ def detect():
             has_attachment     = int(data.get('has_attachment', 0)),
             attachment_ext     = data.get('attachment_ext', ''),
             attachment_size_kb = float(data.get('attachment_size_kb', 0)),
+            file_name          = 'Manual Web Form'
         )
         return jsonify(result)
     except Exception as e:
@@ -338,10 +405,37 @@ def upload_email():
             attachment_size_kb = parsed['attachment_size_kb'],
             raw_text_for_urls  = parsed.get('raw_text_for_urls'),
             headers_str        = parsed.get('headers_str', ''),
+            file_name          = f.filename
         )
         result['file_name'] = f.filename
         return jsonify(result)
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    """Retrieve recent scan audit logs from SQLite database."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM scan_logs ORDER BY id DESC LIMIT 50")
+        rows = [dict(row) for row in c.fetchall()]
+        
+        # Summary statistics
+        c.execute("SELECT predicted_threat, COUNT(*) as count FROM scan_logs GROUP BY predicted_threat")
+        stats = {row['predicted_threat']: row['count'] for row in c.fetchall()}
+        
+        c.execute("SELECT COUNT(*) FROM scan_logs")
+        total = c.fetchone()[0]
+        
+        conn.close()
+        return jsonify({
+            'total_scanned': total,
+            'class_breakdown': stats,
+            'recent_scans': rows
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
